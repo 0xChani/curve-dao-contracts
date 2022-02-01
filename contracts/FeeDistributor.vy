@@ -9,11 +9,13 @@ from vyper.interfaces import ERC20
 
 
 interface VotingEscrow:
-    def user_point_epoch(addr: address) -> uint256: view
+    def user_point_epoch(tokenId: uint256) -> uint256: view
     def epoch() -> uint256: view
-    def user_point_history(addr: address, loc: uint256) -> Point: view
+    def user_point_history(tokenId: uint256, loc: uint256) -> Point: view
     def point_history(loc: uint256) -> Point: view
     def checkpoint(): nonpayable
+    def tokenOfOwnerByIndex(addr: address, index: uint256) -> uint256: view
+    def balanceOf(addr: address) -> uint256: view
 
 
 event CommitAdmin:
@@ -158,7 +160,7 @@ def _find_timestamp_epoch(ve: address, _timestamp: uint256) -> uint256:
 
 @view
 @internal
-def _find_timestamp_user_epoch(ve: address, user: address, _timestamp: uint256, max_user_epoch: uint256) -> uint256:
+def _find_timestamp_user_epoch(ve: address, user: uint256, _timestamp: uint256, max_user_epoch: uint256) -> uint256:
     _min: uint256 = 0
     _max: uint256 = max_user_epoch
     for i in range(128):
@@ -183,9 +185,11 @@ def ve_for_at(_user: address, _timestamp: uint256) -> uint256:
     @return uint256 veCRV balance
     """
     ve: address = self.voting_escrow
-    max_user_epoch: uint256 = VotingEscrow(ve).user_point_epoch(_user)
-    epoch: uint256 = self._find_timestamp_user_epoch(ve, _user, _timestamp, max_user_epoch)
-    pt: Point = VotingEscrow(ve).user_point_history(_user, epoch)
+    assert VotingEscrow(ve).balanceOf(_user) == 1
+    tokenId: uint256 = VotingEscrow(ve).tokenOfOwnerByIndex(msg.sender, 0)
+    max_user_epoch: uint256 = VotingEscrow(ve).user_point_epoch(tokenId)
+    epoch: uint256 = self._find_timestamp_user_epoch(ve, tokenId, _timestamp, max_user_epoch)
+    pt: Point = VotingEscrow(ve).user_point_history(tokenId, epoch)
     return convert(max(pt.bias - pt.slope * convert(_timestamp - pt.ts, int128), 0), uint256)
 
 
@@ -230,7 +234,9 @@ def _claim(addr: address, ve: address, _last_token_time: uint256) -> uint256:
     user_epoch: uint256 = 0
     to_distribute: uint256 = 0
 
-    max_user_epoch: uint256 = VotingEscrow(ve).user_point_epoch(addr)
+    assert VotingEscrow(ve).balanceOf(addr) == 1
+    tokenId: uint256 = VotingEscrow(ve).tokenOfOwnerByIndex(addr, 0)
+    max_user_epoch: uint256 = VotingEscrow(ve).user_point_epoch(tokenId)
     _start_time: uint256 = self.start_time
 
     if max_user_epoch == 0:
@@ -240,14 +246,14 @@ def _claim(addr: address, ve: address, _last_token_time: uint256) -> uint256:
     week_cursor: uint256 = self.time_cursor_of[addr]
     if week_cursor == 0:
         # Need to do the initial binary search
-        user_epoch = self._find_timestamp_user_epoch(ve, addr, _start_time, max_user_epoch)
+        user_epoch = self._find_timestamp_user_epoch(ve, tokenId, _start_time, max_user_epoch)
     else:
         user_epoch = self.user_epoch_of[addr]
 
     if user_epoch == 0:
         user_epoch = 1
 
-    user_point: Point = VotingEscrow(ve).user_point_history(addr, user_epoch)
+    user_point: Point = VotingEscrow(ve).user_point_history(tokenId, user_epoch)
 
     if week_cursor == 0:
         week_cursor = (user_point.ts + WEEK - 1) / WEEK * WEEK
@@ -270,7 +276,7 @@ def _claim(addr: address, ve: address, _last_token_time: uint256) -> uint256:
             if user_epoch > max_user_epoch:
                 user_point = empty(Point)
             else:
-                user_point = VotingEscrow(ve).user_point_history(addr, user_epoch)
+                user_point = VotingEscrow(ve).user_point_history(tokenId, user_epoch)
 
         else:
             # Calc

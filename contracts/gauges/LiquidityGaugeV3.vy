@@ -142,8 +142,8 @@ def __init__(_lp_token: address, _minter: address, _admin: address):
     """
 
     symbol: String[26] = ERC20Extended(_lp_token).symbol()
-    self.name = concat("Curve.fi ", symbol, " Gauge Deposit")
-    self.symbol = concat(symbol, "-gauge")
+    self.name = concat(symbol, " Spice Harvester Deposit")
+    self.symbol = concat("st", symbol)
 
     crv_token: address = Minter(_minter).token()
     controller: address = Minter(_minter).controller()
