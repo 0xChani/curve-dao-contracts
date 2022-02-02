@@ -28,7 +28,6 @@ interface VotingEscrow:
     def get_last_user_slope(tokenId: uint256) -> int128: view
     def locked__end(tokenId: uint256) -> uint256: view
     def tokenOfOwnerByIndex(addr: address, index: uint256) -> uint256: view
-    def balanceOf(addr: address) -> uint256: view
     def voting(tokenId: uint256): nonpayable
     def abstain(tokenId: uint256): nonpayable
     def setVoter(addr: address): nonpayable
@@ -503,8 +502,8 @@ def vote_for_gauge_weights(_gauge_addr: address, _user_weight: uint256):
     @param _user_weight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
     """
     escrow: address = self.voting_escrow
-    assert VotingEscrow(escrow).balanceOf(msg.sender) == 1
     tokenId: uint256 = VotingEscrow(escrow).tokenOfOwnerByIndex(msg.sender, 0)
+    assert tokenId > 0, "You have no ve token"
     slope: uint256 = convert(VotingEscrow(escrow).get_last_user_slope(tokenId), uint256)
     lock_end: uint256 = VotingEscrow(escrow).locked__end(tokenId)
     _n_gauges: int128 = self.n_gauges
