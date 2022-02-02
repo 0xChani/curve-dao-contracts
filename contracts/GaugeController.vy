@@ -29,6 +29,9 @@ interface VotingEscrow:
     def locked__end(tokenId: uint256) -> uint256: view
     def tokenOfOwnerByIndex(addr: address, index: uint256) -> uint256: view
     def balanceOf(addr: address) -> uint256: view
+    def voting(tokenId: uint256): nonpayable
+    def abstain(tokenId: uint256): nonpayable
+    def setVoter(addr: address): nonpayable
 
 
 event CommitOwnership:
@@ -148,6 +151,15 @@ def apply_transfer_ownership():
     assert _admin != ZERO_ADDRESS  # dev: admin not set
     self.admin = _admin
     log ApplyOwnership(_admin)
+
+@external
+def recover_voter():
+    """
+    @notice recover voter power of ve token
+    """
+    assert msg.sender == self.admin  # dev: admin only
+    escrow: address = self.voting_escrow
+    VotingEscrow(escrow).setVoter(msg.sender)
 
 
 @external
@@ -522,6 +534,10 @@ def vote_for_gauge_weights(_gauge_addr: address, _user_weight: uint256):
     power_used = power_used + new_slope.power - old_slope.power
     self.vote_user_power[msg.sender] = power_used
     assert (power_used >= 0) and (power_used <= 10000), 'Used too much power'
+    if power_used == 0:
+        VotingEscrow(escrow).abstain(tokenId)
+    if power_used > 0:
+        VotingEscrow(escrow).voting(tokenId)
 
     ## Remove old and schedule new slope changes
     # Remove slope changes for old slopes
