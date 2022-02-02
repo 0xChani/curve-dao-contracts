@@ -29,12 +29,13 @@ interface Minter:
     def minted(user: address, gauge: address) -> uint256: view
 
 interface VotingEscrow:
-    def user_point_epoch(addr: address) -> uint256: view
-    def user_point_history__ts(addr: address, epoch: uint256) -> uint256: view
+    def user_point_epoch(tokenId: uint256) -> uint256: view
+    def user_point_history__ts(tokenId: uint256, epoch: uint256) -> uint256: view
+    def tokenOfOwnerByIndex(addr: address, index: uint256) -> uint256: view
+    def balanceOfNFT(tokenId: uint256) -> uint256: view
 
 interface ERC20Extended:
     def symbol() -> String[26]: view
-
 
 event Deposit:
     provider: indexed(address)
@@ -189,7 +190,8 @@ def _update_liquidity_limit(addr: address, l: uint256, L: uint256):
     """
     # To be called after totalSupply is updated
     _voting_escrow: address = self.voting_escrow
-    voting_balance: uint256 = ERC20(_voting_escrow).balanceOf(addr)
+    tokenId: uint256 = VotingEscrow(_voting_escrow).tokenOfOwnerByIndex(addr, 0)
+    voting_balance: uint256 = VotingEscrow(_voting_escrow).balanceOfNFT(tokenId)
     voting_total: uint256 = ERC20(_voting_escrow).totalSupply()
 
     lim: uint256 = l * TOKENLESS_PRODUCTION / 100
@@ -482,13 +484,14 @@ def kick(addr: address):
     @param addr Address to kick
     """
     _voting_escrow: address = self.voting_escrow
+    tokenId: uint256 = VotingEscrow(_voting_escrow).tokenOfOwnerByIndex(addr, 0)
     t_last: uint256 = self.integrate_checkpoint_of[addr]
     t_ve: uint256 = VotingEscrow(_voting_escrow).user_point_history__ts(
-        addr, VotingEscrow(_voting_escrow).user_point_epoch(addr)
+        tokenId, VotingEscrow(_voting_escrow).user_point_epoch(tokenId)
     )
     _balance: uint256 = self.balanceOf[addr]
 
-    assert ERC20(_voting_escrow).balanceOf(addr) == 0 or t_ve > t_last # dev: kick not allowed
+    assert VotingEscrow(_voting_escrow).balanceOfNFT(tokenId) == 0 or t_ve > t_last # dev: kick not allowed
     assert self.working_balances[addr] > _balance * TOKENLESS_PRODUCTION / 100  # dev: kick not needed
 
     self._checkpoint(addr)
