@@ -25,8 +25,12 @@ struct VotedSlope:
 
 
 interface VotingEscrow:
-    def get_last_user_slope(addr: address) -> int128: view
-    def locked__end(addr: address) -> uint256: view
+    def get_last_user_slope(tokenId: uint256) -> int128: view
+    def locked__end(tokenId: uint256) -> uint256: view
+    def tokenOfOwnerByIndex(addr: address, index: uint256) -> uint256: view
+    def voting(tokenId: uint256): nonpayable
+    def abstain(tokenId: uint256): nonpayable
+    def setVoter(addr: address): nonpayable
 
 
 event CommitOwnership:
@@ -146,6 +150,15 @@ def apply_transfer_ownership():
     assert _admin != ZERO_ADDRESS  # dev: admin not set
     self.admin = _admin
     log ApplyOwnership(_admin)
+
+@external
+def recover_voter():
+    """
+    @notice recover voter power of ve token
+    """
+    assert msg.sender == self.admin  # dev: admin only
+    escrow: address = self.voting_escrow
+    VotingEscrow(escrow).setVoter(msg.sender)
 
 
 @external
@@ -489,8 +502,10 @@ def vote_for_gauge_weights(_gauge_addr: address, _user_weight: uint256):
     @param _user_weight Weight for a gauge in bps (units of 0.01%). Minimal is 0.01%. Ignored if 0
     """
     escrow: address = self.voting_escrow
-    slope: uint256 = convert(VotingEscrow(escrow).get_last_user_slope(msg.sender), uint256)
-    lock_end: uint256 = VotingEscrow(escrow).locked__end(msg.sender)
+    tokenId: uint256 = VotingEscrow(escrow).tokenOfOwnerByIndex(msg.sender, 0)
+    assert tokenId > 0, "You have no ve token"
+    slope: uint256 = convert(VotingEscrow(escrow).get_last_user_slope(tokenId), uint256)
+    lock_end: uint256 = VotingEscrow(escrow).locked__end(tokenId)
     _n_gauges: int128 = self.n_gauges
     next_time: uint256 = (block.timestamp + WEEK) / WEEK * WEEK
     assert lock_end > next_time, "Your token lock expires too soon"
@@ -518,6 +533,10 @@ def vote_for_gauge_weights(_gauge_addr: address, _user_weight: uint256):
     power_used = power_used + new_slope.power - old_slope.power
     self.vote_user_power[msg.sender] = power_used
     assert (power_used >= 0) and (power_used <= 10000), 'Used too much power'
+    if power_used == 0:
+        VotingEscrow(escrow).abstain(tokenId)
+    if power_used > 0:
+        VotingEscrow(escrow).voting(tokenId)
 
     ## Remove old and schedule new slope changes
     # Remove slope changes for old slopes
